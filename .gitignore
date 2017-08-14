@@ -1,0 +1,3 @@
+localStorageQueueForFlakyConnections/*
+!localStorageQueueForFlakyConnections/index.html
+!localStorageQueueForFlakyConnections/server.php

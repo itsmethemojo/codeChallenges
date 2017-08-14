@@ -1,0 +1,131 @@
+
+Queue Length: <span class="queue"></span><br/>
+a: <input type="text" name="a" value=""><br>
+b: <input type="text" name="b" value=""><br>
+c: <input type="text" name="c" value=""><br>
+d: <input type="text" name="d" value=""><br>
+<input type="button" class="save" value="save">
+
+<script>
+
+//this two functions overload localstorage with the capibility to save complex data structures
+Storage.prototype.setObject = function(key, value) {
+    'use strict';
+    this.setItem(key, JSON.stringify(value));
+};
+
+Storage.prototype.getObject = function(key) {
+    'use strict';
+    return JSON.parse(this.getItem(key));
+};
+
+
+// load the localStorage 'queue' or set it empty
+var queue = localStorage.getObject('queue');
+if (queue === null) {
+    queue = [];
+    localStorage.setObject('queue', queue);
+}
+
+// load an array of already deleted queue items or set it empty
+var deletedQueueItems = localStorage.getObject('deletedQueueItems');
+if (deletedQueueItems === null) {
+    deletedQueueItems = [];
+    localStorage.setObject('deletedQueueItems', deletedQueueItems);
+}
+
+// set the queue count
+document.querySelector('span.queue').innerHTML = queue.length;
+
+
+// simply save the form data in the queue
+function saveDataToQueue() {
+    queue.push({
+        'id': new Date().getTime() + '',
+        'a': document.querySelector('input[name=a]').value,
+        'b': document.querySelector('input[name=b]').value,
+        'c': document.querySelector('input[name=c]').value,
+        'd': document.querySelector('input[name=d]').value
+    });
+    localStorage.setObject('queue', queue);
+    document.querySelector('span.queue').innerHTML = queue.length;
+
+}
+
+// make the button call the function to save the data
+document.querySelector('input.save').addEventListener('click', function() {
+    saveDataToQueue();
+});
+
+function getQueueEntryData(queueId) {
+    var queueCopy = queue;
+    for (var index = 0; index < queueCopy.length; ++index) {
+        if (queueCopy[index].id.toString() === queueId) {
+            return 'id=' + queueCopy[index].id + '&a=' + queueCopy[index].a + '&b=' + queueCopy[index].b + '&c=' + queueCopy[index].c + '&d=' + queueCopy[index].d;
+        }
+    }
+    return '';
+}
+
+// process queue entry by sending it to the server
+function sendQueueEntry(queueId) {
+
+    var parameterList = getQueueEntryData(queueId);
+    var request = new XMLHttpRequest();
+    request.open("POST", "server.php");
+    // request timeout 1 second
+    request.timeout = 1000;
+    request.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+
+    // so here is the fucked up javascript asynchronous part
+    // if the requests is ok, mark that queue entry for removal
+    request.addEventListener('load', function(event) {
+        if (request.status >= 200 && request.status < 300) {
+            deletedQueueItems.push(queueId);
+        }
+    });
+    request.send(parameterList);
+}
+
+// remove 'marked for remove' entries from the queue before working the queue
+// so this is the first crazy thing
+// because it may cause race conditions if you add something in the exact moment this runs
+function cleanTheQueue() {
+    if (deletedQueueItems.length === 0) {
+        return;
+    }
+    var queueCopy = queue;
+    var newQueue = [];
+    for (var index = 0; index < queueCopy.length; ++index) {
+        if (deletedQueueItems.indexOf(queueCopy[index].id.toString()) < 0) {
+            newQueue.push(queueCopy[index]);
+        }
+    }
+    queue = newQueue;
+    localStorage.setObject('queue', queue);
+
+    deletedQueueItems = [];
+    localStorage.setObject('deletedQueueItems', deletedQueueItems);
+
+    //update ui queue count
+    document.querySelector('span.queue').innerHTML = queue.length;
+}
+
+
+// function to clear the queue
+function workTheQueue() {
+    var queueCopy = queue;
+    console.log('start working the queue (' + queueCopy.length + ')');
+    for (var index = 0; index < queueCopy.length; ++index) {
+        sendQueueEntry(queueCopy[index].id);
+    }
+
+}
+
+// lets work the queue every x seconds
+setInterval(function() {
+    cleanTheQueue();
+    workTheQueue();
+}, 5000);
+
+</script>
